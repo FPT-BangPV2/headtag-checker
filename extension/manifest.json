@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Metadata Extractor",
+  "version": "1.0",
+  "description": "MetaTag Auditor - Chrome & Edge Extension",
+  "icons": {
+    "128": "icon.png"
+  },
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  }
+}
