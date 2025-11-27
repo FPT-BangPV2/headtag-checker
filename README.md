@@ -83,7 +83,9 @@ Edge cũng làm tương tự tại `edge://extensions`
 - [ ] Lịch sử kiểm tra các trang đã duyệt
 
 - [ ] Whitelist/Blacklist domain
+
 - [ ] Highlight trực tiếp trên trang (màu đỏ = lỗi nghiêm trọng, vàng = cảnh báo)
+
 - [ ] Popup chi tiết + số lượng lỗi
 
 ## Đóng góp
