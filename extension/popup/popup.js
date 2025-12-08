@@ -1,269 +1,296 @@
 "use strict";
+
 /**
  * popup/popup.js
- * UI logic: Bind buttons, render results.
+ * SEO Tag Inspector Pro – Manifest V3 compatible
  */
 
-import { sendRuntimeMessage } from "../utils/messaging.js"; // Rename for accuracy
+import { sendRuntimeMessage } from "../utils/messaging.js";
 import { exportCSV } from "../utils/csv.js";
-import { setStorage, storageKeyForTab, getLastScanForTab, clearUI } from "../utils/storage.js"; // Merge state into storage
+import { getLastScanForTab, clearScanForTab } from "../utils/storage.js";
 
+/* ====================== CONSTANTS & SELECTORS ====================== */
+const SELECTORS = {
+  scanBtn: "#scanBtn",
+  clearBtn: "#clearBtn",
+  copyJson: "#copyJson",
+  downloadCsv: "#downloadCsv",
+  url: "#url",
+  errors: "#errors",
+  warnings: "#warnings",
+  headCount: "#head-count",
+  bodyCount: "#body-count",
+  result: "#result",
+  tabs: ".tab",
+};
+
+const els = {};
+Object.keys(SELECTORS).forEach((key) => {
+  els[key] = document.querySelector(SELECTORS[key]);
+});
+
+/* ====================== STATE ====================== */
 let activeTabId = null;
+let currentUrl = "";
+
+/* ====================== UTILS ====================== */
+const escapeHtml = (str) => {
+  if (typeof str !== "string") return str;
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+};
+
+const truncate = (str, len = 60) => {
+  return str.length > len ? str.slice(0, len - 3) + "..." : str;
+};
+
+const shortenUrl = (url) => {
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/").filter(Boolean);
+    if (parts.length === 0) return url;
+    return parts.slice(-2).join("/") || url;
+  } catch {
+    return url.split("/").pop() || url;
+  }
+};
+
+const getTagDisplay = (item) => {
+  if (item.tag) return item.tag;
+  if (item.property) return `meta property="${item.property}"`;
+  if (item.name) return `meta name="${item.name}"`;
+  if (item.rel) return `link rel="${item.rel}"`;
+  return "tag";
+};
+
+const getIcon = (item) => {
+  if (item.type === "title") return "T";
+  if (item.name === "description") return "D";
+  if (item.property?.startsWith("og:")) return "OG";
+  if (item.rel === "canonical") return "C";
+  return "M";
+};
+
+/* ====================== RENDER HELPERS ====================== */
+const createIssueCard = (group) => {
+  const isError = group.issues.some((i) => i.severity === "error");
+  const displayText = group.display ? truncate(group.display, 70) : "";
+
+  return `${group.issues
+    .map(
+      (iss) => `
+            <div class="card ${isError ? "error" : "warning"}">
+                <div class="card-header">
+                    <span class="tag">&lt;${escapeHtml(getTagDisplay(group.tag))}&gt;</span>
+                    ${
+                      displayText
+                        ? `<strong title="${escapeHtml(group.display)}">${escapeHtml(
+                            displayText
+                          )}</strong>`
+                        : ""
+                    }
+                </div>
+                ${iss.desc ? `<p class="card-desc">${escapeHtml(iss.desc)}</p>` : ""}
+                ${iss.code ? `<code class="card-code">${escapeHtml(iss.code)}</code>` : ""}
+                <div class="tip">${
+                  iss.tip || (isError ? "Needs immediate fixing" : "Should be optimized")
+                }</div>
+            </div>`
+    )
+    .join("")} `;
+};
+
+const renderPerfectState = () => `
+ <div class="perfect">
+   <div class="perfect-icon">✓</div>
+   <p>No SEO issues detected. Awesome!</p>
+ </div>
+`;
+
+const renderTagGrid = (tags) => {
+  if (!tags || tags.length === 0) {
+    return '<p class="muted">No important meta tags detected</p>';
+  }
+  return `
+    <h3 class="section-title">Important Meta Tags Detected</h3>
+    <div class="tag-grid">${tags
+      .map((t) => {
+        const label = t.property || t.name || t.rel || t.type;
+        const value = t.value || t.href || "";
+        const truncated = value.length > 80 ? value.slice(0, 77) + "..." : value;
+        return `
+          <div class="tag-card" title="${escapeHtml(value)}">
+              <div class="tag-wrap ">
+                  <span class="tag-icon">${getIcon(t)}</span>
+                  <span class="tag-label">${escapeHtml(label)}</span>
+              </div>
+              <div class="tag-value truncate-3-lines">${escapeHtml(truncated)}</div>
+          </div>
+      `;
+      })
+      .join("")}
+    </div>
+  `;
+};
+
+/* ====================== MAIN RENDER ====================== */
+const renderResult = (scan) => {
+  if (!scan || scan.summary.errors + scan.summary.warnings === 0) {
+    els.result.innerHTML = `<div class="tab-pane">${renderPerfectState()}</div><div class="tab-pane" style="display:none;">${renderPerfectState()}</div>`;
+    els.headCount.textContent = "0";
+    els.bodyCount.textContent = "0";
+    return;
+  }
+
+  const grouped = {};
+  // Group HEAD & BODY
+  const addToGroup = (items, severity = "warning") => {
+    console.log("addToGroup:::", items);
+    // const grouped = {};
+    items.forEach((item) => {
+      const key = item.elementKey || "general";
+      if (!grouped[key]) {
+        grouped[key] = {
+          tag: item.tag || getTagDisplay(item),
+          display: item.display || item.title,
+          issues: [],
+        };
+      }
+      grouped[key].issues.push({ ...item, severity });
+    });
+    return Object.values(grouped).map(createIssueCard).join("");
+  };
+
+  console.log(grouped);
+
+  // Head: errors + warnings
+  const headErrorsHTML = addToGroup(scan.head.errors, "error");
+  const headWarningsHTML = addToGroup(scan.head.warnings, "warning");
+  // Body: errors + warnings
+  const bodyErrorsHTML = addToGroup(scan.body.errors, "error");
+  const bodyWarningsHTML = addToGroup(scan.body.warnings, "warning");
+
+  let headHTML = "";
+  let bodyHTML = "";
+
+  Object.values(grouped).forEach((group) => {
+    const html = createIssueCard(group);
+    if (group.tag === "img" || /^h[1-6]$/.test(group.tag)) {
+      bodyHTML += html;
+    } else {
+      headHTML += html;
+    }
+  });
+
+  // ADD BACK HEAD TAGS GRID – ONLY IN HEAD TAB
+  const tagGridHTML = scan.head.tags.length > 0 ? renderTagGrid(scan.head.tags) : "";
+
+  // Fallback if no issue exists.
+  headHTML = `
+    ${headErrorsHTML}
+    ${headWarningsHTML}
+    ${tagGridHTML}
+    ${
+      !headErrorsHTML && !headWarningsHTML && !tagGridHTML
+        ? '<p class="muted">No issues in &lt;head&gt;</p>'
+        : ""
+    }
+ `;
+  bodyHTML = `
+    ${bodyErrorsHTML}
+    ${bodyWarningsHTML}
+    ${!bodyErrorsHTML && !bodyWarningsHTML ? '<p class="muted">No issues in body</p>' : ""}
+ `;
+
+  els.result.innerHTML = `
+   <div id="head" class="tab-pane">${headHTML}</div>
+   <div id="body" class="tab-pane" style="display:none;">${bodyHTML}</div>
+ `;
+
+  // Update counts
+  els.headCount.textContent = scan.head.errors.length + scan.head.warnings.length;
+  els.bodyCount.textContent = scan.body.errors.length + scan.body.warnings.length;
+};
+
+/* ====================== TAB SWITCHING ====================== */
+const initTabs = () => {
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+
+      document.querySelectorAll(".tab-pane").forEach((pane) => (pane.style.display = "none"));
+      document.getElementById(tab.dataset.tab).style.display = "block";
+    });
+  });
+};
+
+/* ====================== ACTIONS ====================== */
+const setLoading = (yes) => {
+  els.scanBtn.disabled = yes;
+  if (yes) {
+    els.result.innerHTML = `
+     <div class="loading">
+       <div class="spinner"></div>
+       <p>Analyzing the website...</p>
+     </div>`;
+  }
+};
+
+const loadCurrentScan = async () => {
+  const scan = await getLastScanForTab(activeTabId);
+  els.errors.textContent = scan?.summary.errors ?? 0;
+  els.warnings.textContent = scan?.summary.warnings ?? 0;
+  renderResult(scan);
+};
+
+/* ====================== INIT ====================== */
 document.addEventListener("DOMContentLoaded", async () => {
-  const scanBtn = document.getElementById("scanBtn");
-  const copyBtn = document.getElementById("copyJson");
-  const downloadBtn = document.getElementById("downloadCsv");
-  const urlEl = document.getElementById("url");
-  const errorsEl = document.getElementById("errors");
-  const warningsEl = document.getElementById("warnings");
-  const resultEl = document.getElementById("result");
-
-  // Get active tab once
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+
   activeTabId = tab?.id;
-  urlEl.textContent = tab?.url ? tab.url.split("?")[0] : "No active tab";
+  currentUrl = new URL(tab.url).origin + new URL(tab.url).pathname;
+  els.url.textContent = currentUrl.length > 60 ? currentUrl.slice(0, 57) + "..." : currentUrl;
 
-  await loadLastScan(errorsEl, warningsEl, resultEl);
+  initTabs();
+  await loadCurrentScan();
 
-  // scan button
-  scanBtn.addEventListener("click", async () => {
-    if (!activeTabId) return;
-
+  // Scan
+  els.scanBtn.addEventListener("click", async () => {
     setLoading(true);
-
     try {
-      const res = await sendRuntimeMessage({ action: "runScan" });
-      if (!res?.success) throw new Error(res?.error || "Scan failed");
-
-      await loadLastScan(errorsEl, warningsEl, resultEl);
-    } catch (error) {
-      console.error("[Popup] scan error", error);
-      resultEl.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+      await sendRuntimeMessage({ action: "runScan" });
+      await loadCurrentScan();
+    } catch (err) {
+      els.result.innerHTML = `<div class="error-msg">Error: ${escapeHtml(err.message)}</div>`;
     } finally {
       setLoading(false);
     }
   });
 
-  // Clear button
-  clearBtn.addEventListener("click", async () => {
-    if (!activeTabId) return;
-    await setStorage({ [storageKeyForTab(activeTabId)]: null });
-    clearUI();
-
-    errorsEl.textContent = "0";
-    warningsEl.textContent = "0";
+  // Clear
+  els.clearBtn.addEventListener("click", async () => {
+    await clearScanForTab(activeTabId);
+    await sendRuntimeMessage({ action: "clearScan", tabId: activeTabId }); // reset badge
+    els.errors.textContent = els.warnings.textContent = "0";
+    els.headCount.textContent = els.bodyCount.textContent = "0";
+    els.result.innerHTML = '<div class="placeholder">Results deleted. Click Scan to recheck!</div>';
   });
 
-  // copy JSON button
-  copyBtn.addEventListener("click", async () => {
-    try {
-      const last = await getLastScanForTab(activeTabId);
-
-      if (!last) {
-        throw new Error("No data");
-      }
-      await navigator.clipboard.writeText(JSON.stringify(last, null, 2));
-      alert("Copied JSON!");
-    } catch (error) {
-      alert("Copy error: " + error.message);
-    }
+  // Copy
+  els.copyJson.addEventListener("click", async () => {
+    const scan = await getLastScanForTab(activeTabId);
+    if (!scan) return alert("No data to copy!");
+    await navigator.clipboard.writeText(JSON.stringify(scan, null, 2));
+    alert("JSON has been copied to the clipboard!");
   });
 
-  // download CSV button
-  downloadBtn.addEventListener("click", async () => {
-    try {
-      const last = await getLastScanForTab(activeTabId);
-
-      if (!last) {
-        throw new Error("No data");
-      }
-
-      exportCSV(`SEO-Tag-Inspector-${new Date().toISOString().split("T")[0]}.csv`, last);
-    } catch (error) {
-      alert("Export error: " + error.message);
-    }
+  // Export
+  els.downloadCsv.addEventListener("click", async () => {
+    const scan = await getLastScanForTab(activeTabId);
+    if (!scan) return alert("No data to export!");
+    exportCSV(`SEO-Report-${new Date().toISOString().split("T")[0]}.csv`, scan);
   });
-
-  // Loading state
-  function setLoading(isLoading) {
-    if (isLoading) {
-      scanBtn.disabled = true;
-      resultEl.innerHTML = `
-       <div class="loading">
-           <div class="spinner"></div>
-           <p>Analyzing page structure...<br><small>Please wait a moment</small></p>
-       </div>
-       `;
-    } else {
-      scanBtn.disabled = false;
-    }
-  }
 });
-
-// Reusable load & render
-async function loadLastScan(errorsEl, warningsEl, resultEl) {
-  const last = await getLastScanForTab(activeTabId);
-  if (!last) {
-    clearUI();
-    return;
-  }
-  errorsEl.textContent = last.summary.errors || 0;
-  warningsEl.textContent = last.summary.warnings || 0;
-  renderResult(last, resultEl);
-}
-
-// Render with sections
-function renderResult(scan, resultEl) {
-  let html = "";
-  console.log("Rendering scan:", scan);
-
-  // Issues section
-  if (scan.issues.length > 0) {
-    scan.issues.forEach((msg) => {
-      let tag = "meta";
-      if (msg.includes("title")) tag = "title";
-      else if (msg.includes("description")) tag = 'meta name="description"';
-      else if (msg.includes("canonical")) tag = 'link rel="canonical"';
-      else if (msg.includes("robots")) tag = 'meta name="robots"';
-
-      html += `
-       <div class="issue-card">
-         <strong><span class="tag">&lt;${escapeHtml(tag)}&gt;</span> ${escapeHtml(
-        msg.replace("Missing ", "").trim()
-      )}</strong>
-         <div class="tip">This tag is critical for SEO and should be added immediately</div>
-       </div>`;
-    });
-  }
-
-  // Warnings section
-  if (scan.warnings.length > 0) {
-    scan.warnings.forEach((msg) => {
-      let tag = "";
-      let cleanMsg = msg;
-      let extra = "";
-
-      if (/og:/.test(msg)) {
-        const match = msg.match(/og:[^ ]+/);
-        tag = match ? `meta property="${match[0]}"` : "meta og";
-        cleanMsg = `Missing ${match ? match[0] : "Open Graph tag"}`;
-      } else if (msg.includes("Title")) {
-        tag = "title";
-        cleanMsg = msg.includes("long") ? "Title too long" : "Title too short";
-        extra = msg.match(/\(.+\)/)?.[0] || "";
-      } else if (msg.includes("description")) {
-        tag = "meta description";
-        cleanMsg = msg.includes("long") ? "Description too long" : "Description missing";
-        extra = msg.match(/\(.+\)/)?.[0] || "";
-      } else if (msg.includes("H1")) {
-        tag = "h1";
-        cleanMsg = "Missing H1";
-      } else if (msg.includes("alt")) {
-        tag = "img";
-        cleanMsg = "Image missing alt";
-        extra = msg.split(": ")[1]?.slice(0, 50) + (msg.split(": ")[1]?.length > 50 ? "..." : "");
-      }
-
-      html += `
-       <div class="warn-card">
-         <strong>
-           <span class="tag">&lt;${escapeHtml(tag)}&gt;</span> 
-           ${escapeHtml(cleanMsg)} 
-           ${extra ? `<span class="length">${escapeHtml(extra)}</span>` : ""}
-         </strong>
-         <div class="tip">
-           ${
-             msg.includes("alt")
-               ? "Improves accessibility + Google Images"
-               : msg.includes("Title")
-               ? "Ideal: 50–60 characters"
-               : msg.includes("description")
-               ? "Ideal: 150–160 characters"
-               : msg.includes("og:")
-               ? "Required for perfect social sharing"
-               : "Recommended for better SEO"
-           }
-         </div>
-       </div>`;
-    });
-  }
-
-  const prefixTag = scan.headTags.find((t) => t.type === "prefix");
-  if (prefixTag) {
-    html += `<div class="prefix-note">Open Graph prefix detected: <code>${escapeHtml(
-      prefixTag.value
-    )}</code></div>`;
-  }
-
-  if (scan.issues.length === 0 && scan.warnings.length === 0) {
-    html = `
-     <div style="text-align:center;padding:80px 20px;color:#10b981;">
-       <div style="font-size:64px;margin-bottom:16px;">Checkmark</div>
-       <strong style="font-size:18px;display:block;margin-bottom:8px;">Perfect!</strong>
-       <p style="color:#64748b;">No SEO issues detected. Great job!</p>
-     </div>`;
-  }
-
-  // Head Tags section (sorted)
-  //   const importantTags = scan.headTags.filter(
-  //     (t) =>
-  //       t.type === "title" ||
-  //       t.name === "description" ||
-  //       t.property?.startsWith("og:") ||
-  //       t.rel === "canonical"
-  //   );
-
-  //   html += `<section class="section tags">
-  //       <h3>Key Meta Tags</h3>`;
-  //   if (importantTags.length === 0) {
-  //     html += `<p class="muted">No important meta tags detected</p>`;
-  //   } else {
-  //     html += '<div class="tag-grid">';
-  //     importantTags.forEach((t) => {
-  //       let label = "";
-  //       let value = "";
-  //       let icon = "";
-
-  //       if (t.type === "title") {
-  //         label = "Title";
-  //         value = t.value;
-  //         icon = "T";
-  //       } else if (t.name === "description") {
-  //         label = "Description";
-  //         value = t.value;
-  //         icon = "D";
-  //       } else if (t.property?.startsWith("og:")) {
-  //         label = t.property.replace("og:", "");
-  //         value = t.value;
-  //         icon = "OG";
-  //       } else if (t.rel === "canonical") {
-  //         label = "Canonical";
-  //         value = t.href;
-  //         icon = "Link";
-  //       }
-
-  //       const truncated = value.length > 70 ? value.slice(0, 67) + "..." : value;
-
-  //       html += `
-  //           <div class="tag-card" title="${escapeHtml(value)}">
-  //             <div class="tag-icon">${icon}</div>
-  //             <div class="tag-content">
-  //               <div class="tag-label">${label}</div>
-  //               <div class="tag-value">${escapeHtml(truncated)}</div>
-  //             </div>
-  //           </div>`;
-  //     });
-  //     html += "</div>";
-  //   }
-  //   html += `</section>`;
-
-  resultEl.innerHTML = html;
-}
-
-// Helper avoid XSS
-function escapeHtml(text) {
-  if (typeof text !== "string") return text;
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
