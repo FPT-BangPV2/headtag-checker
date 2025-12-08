@@ -19,7 +19,7 @@ export function exportCSV(filename, scan) {
     });
   // Duplicates
   scan.duplicates.forEach((d) => {
-    rows.push(["duplicate", d.name, d.value, "Trùng lặp", d.count]);
+    rows.push(["duplicate", d.name, d.value, "Duplicated", d.count]);
   });
   // Issues/Warnings
   scan.issues.forEach((i) => rows.push(["issue", "", "", i, ""]));

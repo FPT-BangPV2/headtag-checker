@@ -1,20 +1,23 @@
-<!-- popup/popup.html -->
 <!DOCTYPE html>
 <html lang="vi">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>SEO Tag Inspector</title>
+    <title>SEO Tag Inspector Pro</title>
     <link rel="stylesheet" href="popup.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div class="container">
-      <!-- Logo + Title -->
+      <!-- Header -->
       <div class="header-top">
         <img src="../icons/icon-512.png" alt="Logo" class="logo" />
         <h1>SEO Tag Inspector <span class="pro">Pro</span></h1>
       </div>
-      <!-- URL riêng biệt, đẹp lung linh -->
+      <!-- URL Bar -->
       <div class="url-bar">
         <svg
           width="14"
@@ -39,15 +42,30 @@
         <button id="scanBtn" class="btn primary">Scan Page</button>
         <button id="clearBtn" class="btn secondary">Clear</button>
       </div>
+      
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-tab="head">
+          Head <span class="tab-count" id="head-count">0</span>
+        </button>
+        <button class="tab" data-tab="body">
+          Body <span class="tab-count" id="body-count">0</span>
+        </button>
+      </div>
+
       <!-- Result Area -->
-      <div id="result" class="result-area"></div>
+      <div id="result" class="result-area">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Click "Scan Page" để bắt đầu</p>
+        </div>
+      </div>
+
       <!-- Footer -->
       <div class="footer">
         <div class="export-bar">
-          <button id="copyJson" class="btn small btn-json" title="Copy JSON">Code JSON</button>
-          <button id="downloadCsv" class="btn small btn-csv" title="Download CSV">
-            Download CSV
-          </button>
+          <button id="copyJson" class="btn small btn-json">Copy JSON</button>
+          <button id="downloadCsv" class="btn small btn-csv">Export CSV</button>
         </div>
         <span>v2.8.0 • 100% Offline • Made with ❤️ for SEO & Dev</span>
       </div>

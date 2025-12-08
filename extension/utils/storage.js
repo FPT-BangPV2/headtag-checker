@@ -46,9 +46,17 @@ export function getStorage(key) {
 export function getLastScanForTab(tabId) {
   return getStorage(storageKeyForTab(tabId));
 }
+
 /**
- * Clear UI (moved from state.js)
+ * @param {*} tabId
+ * @returns
  */
-export function clearUI(resultEl = document.getElementById("result")) {
-  if (resultEl) resultEl.innerHTML = '<div class="loading"><p>Click "Scan Again" to scan</p></div>';
+export async function clearScanForTab(tabId) {
+  if (!tabId) return;
+  const key = storageKeyForTab(tabId);
+  return new Promise((resolve) => {
+    chrome.storage.local.remove(key, () => {
+      resolve();
+    });
+  });
 }
