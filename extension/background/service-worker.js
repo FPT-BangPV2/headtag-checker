@@ -3,63 +3,52 @@
  * background/service-worker.js
  * Service worker: Relay messages, persist scans, update badge.
  */
-import { setStorage, storageKeyForTab, getLastScanForTab } from "../utils/storage.js";
+import {
+  setStorage,
+  storageKeyForTab,
+  getLastScanForTab,
+  clearScanForTab,
+} from "../utils/storage.js";
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   console.log("[SW] Received:", msg);
-  if (!msg || !msg?.action) return sendResponse({ success: false, error: "Invalid action" });
-
-  // run scan to active tab → forward to content script
+  if (!msg || !msg.action) return false;
   if (msg.action === "runScan") {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
-      console.log("tab :", tab);
       if (!tab) return sendResponse({ success: false, error: "No active tab" });
-
-      // Send message to content script
       chrome.tabs.sendMessage(tab.id, { action: "runScan" }, (res) => {
         if (chrome.runtime.lastError) {
-          sendResponse({
-            success: false,
-            error: chrome.runtime.lastError.message,
-          });
-          return;
+          return sendResponse({ success: false, error: chrome.runtime.lastError.message });
         }
-        sendResponse({
-          success: true,
-          result: res?.result || null,
-        });
+        sendResponse({ success: true, result: res });
       });
     });
     return true;
   }
-  console.log("msg action:", msg.action);
   // scan complete from content script → persist and update badge
   if (msg.action === "scanComplete") {
     const tabId = sender.tab?.id;
     if (!tabId) return sendResponse({ success: false, error: "No tab" });
-
     setStorage({ [storageKeyForTab(tabId)]: msg.data })
       .then(() => {
         updateBadge(tabId, msg.data);
         sendResponse({ success: true });
       })
       .catch((err) => sendResponse({ success: false, error: String(err) }));
-    return true; // async
+    return true;
   }
-
   // clear
   if (msg.action === "clearScan") {
     const tabId = msg.tabId;
     if (!tabId) return sendResponse({ success: false });
-    setStorage({ [storageKeyForTab(tabId)]: null }).then(() => {
-      chrome.action.setBadgeText({ tabId, text: "" }); // Reset badge for this tab
+    clearScanForTab(tabId).then(() => {
+      chrome.action.setBadgeText({ tabId, text: "" });
       sendResponse({ success: true });
     });
     return true;
   }
 
-  sendResponse({ success: false, error: "Unknown action" });
   return false;
 });
 

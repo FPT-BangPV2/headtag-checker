@@ -1,14 +1,20 @@
 // ./rules/language.rule.js
-class LanguageRule {
+class LanguageRule extends BaseRule {
   run(doc, result) {
+    console.log("LanguageRule result::", result);
+
     const lang = doc.documentElement.getAttribute("lang");
     if (!lang) {
-      result.head.warnings.push({
+      this.pushIssue(result, "head", this.severityMap.warning, {
         title: "Missing lang attribute",
-        desc: 'Add <html lang="vi"> or en, ja...',
+        desc: "Specifies page language for accessibility and SEO.",
+        tag: "html",
+        elementKey: "html:lang",
+        suggestion: 'Add <html lang="en"> or appropriate code.',
+        reference: "https://developers.google.com/search/docs/advanced/guidelines/language-of-page",
       });
     } else {
-      result.head.tags.push({ type: "html", name: "lang", value: lang });
+      this.addTag(result, "html", "lang", lang);
     }
   }
 }

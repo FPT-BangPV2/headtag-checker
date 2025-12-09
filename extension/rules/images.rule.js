@@ -1,69 +1,70 @@
 // ./rules/images.rule.js
-class ImagesRule {
+class ImagesRule extends BaseRule {
   run(doc, result) {
     doc.querySelectorAll("img").forEach((img, index) => {
       const src = img.currentSrc || img.src || "";
-
       if (!src) return;
-
       const key = `img:${index}`;
       const shortName = this.shortenUrl(src);
-      const hasAlt = img.alt?.trim() && img.alt !== "";
+      const hasAlt = img.alt?.trim();
       const hasLazy = img.loading === "lazy" || img.hasAttribute("loading");
       const hasSrcset = img.hasAttribute("srcset");
       const hasWidth = img.hasAttribute("width");
       const hasHeight = img.hasAttribute("height");
-
-      if (!hasAlt)
-        result.body.warnings.push({
+      if (!hasAlt) {
+        this.pushIssue(result, "body", this.severityMap.warning, {
           title: "Missing alt attribute",
-          desc: "Improves accessibility & Google images SEO",
+          desc: "Alt text improves accessibility and image SEO.",
           tag: "img",
           display: shortName,
           elementKey: key,
-          severity: "warning",
+          suggestion: 'Add alt="Descriptive text".',
+          reference: "https://developers.google.com/search/docs/advanced/guidelines/google-images",
         });
-
-      if (!hasLazy && !src.includes("data:"))
-        result.body.warnings.push({
-          title: 'Should use loading="lazy"',
-          desc: "Improves pages speed",
+      }
+      if (!hasLazy && !src.includes("data:")) {
+        this.pushIssue(result, "body", this.severityMap.warning, {
+          title: 'Missing loading="lazy"',
+          desc: "Lazy loading improves page speed.",
           tag: "img",
           display: shortName,
           elementKey: key,
-          severity: "warning",
+          suggestion: 'Add loading="lazy" to offscreen images.',
+          reference: "https://developers.google.com/search/docs/appearance/lazy-loading",
         });
-
+      }
       if (!hasSrcset) {
-        result.body.warnings.push({
+        this.pushIssue(result, "body", this.severityMap.warning, {
           title: "Missing srcset attribute",
-          desc: "Needed for responsive images",
+          desc: "Srcset enables responsive images.",
           tag: "img",
           display: shortName,
           elementKey: key,
-          severity: "warning",
+          suggestion: "Add srcset with different resolutions.",
+          reference: "https://developers.google.com/search/docs/appearance/responsive-images",
         });
       }
-
-      if (!hasWidth && !hasHeight) {
-        result.body.warnings.push({
-          title: "Missing width/height",
-          desc: "Prevent layout shift (CLS)",
+      if (!hasWidth || !hasHeight) {
+        this.pushIssue(result, "body", this.severityMap.warning, {
+          title: "Missing width or height",
+          desc: "Prevents layout shifts (CLS score).",
           tag: "img",
           display: shortName,
           elementKey: key,
-          severity: "warning",
+          suggestion: "Add width and height attributes.",
+          reference: "https://developers.google.com/search/docs/appearance/core-web-vitals",
         });
       }
+      // Collect images for potential export
+      result.images.push(shortName);
     });
   }
-
   shortenUrl(url) {
     try {
       const ur = new URL(url);
       const parts = ur.pathname.split("/");
       return parts.slice(-2).join("/");
-    } catch (error) {
+    } catch {
       return url.split("/").pop() || url;
     }
   }

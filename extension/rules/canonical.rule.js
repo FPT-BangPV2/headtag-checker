@@ -2,16 +2,24 @@
 class CanonicalRule extends BaseRule {
   run(doc, result) {
     const link = doc.querySelector('link[rel="canonical"]');
+
     if (!link?.href) {
-      result.head.warnings.push({
+      this.pushIssue(result, "head", this.severityMap.warning, {
         title: "Missing canonical URL",
-        desc: "Prevent content duplication",
+        desc: "Canonical helps prevent duplicate content issues.",
+        suggestion: 'Add <link rel="canonical" href="https://example.com/page">.',
+        reference:
+          "https://developers.google.com/search/docs/advanced/crawling/consolidate-duplicate-urls",
       });
     } else {
       this.addTag(result, "link", "canonical", link.href, link.href);
       const current = location.href.split("?")[0].split("#")[0];
       if (link.href !== current && !link.href.includes(current)) {
-        result.head.warnings.push({ title: "Canonical does not match the current URL" });
+        this.pushIssue(result, "head", this.severityMap.warning, {
+          title: "Canonical does not match current URL",
+          desc: "Mismatch may confuse search engines.",
+          suggestion: "Ensure canonical points to the preferred URL.",
+        });
       }
     }
   }

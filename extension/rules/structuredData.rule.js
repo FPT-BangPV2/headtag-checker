@@ -1,22 +1,17 @@
-// ./rules/structuredData.rule.js
-class StructuredDataRule {
+class StructuredDataRule extends BaseRule {
   run(doc, result) {
     const hasJsonLd = doc.querySelector('script[type="application/ld+json"]');
     if (!hasJsonLd) {
-      result.head.warnings.push({
+      this.pushIssue(result, "head", this.severityMap.warning, {
         title: "Missing Structured Data (JSON-LD)",
-        desc: "Increase chances of Rich Results",
-        tag: "img",
-        display: shortName,
-        elementKey: key,
+        desc: "Enhances search results with rich snippets.",
+        suggestion: 'Add <script type="application/ld+json">{...}</script>.',
+        reference:
+          "https://developers.google.com/search/docs/advanced/structured-data/intro-structured-data",
       });
     } else {
-      result.head.tags.push({
-        type: "script",
-        name: "application/ld+json",
-        value: "Already exists.",
-      });
-      result.structuredData = true;
+      this.addTag(result, "script", "application/ld+json", "Present");
+      // Optionally parse and validate, but keep simple for now
     }
   }
 }

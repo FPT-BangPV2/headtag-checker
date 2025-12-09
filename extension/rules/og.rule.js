@@ -1,41 +1,37 @@
 class OpenGraphRule extends BaseRule {
   run(doc, result) {
-    const prefix = document.head.getAttribute("prefix") || "";
-    console.log("prefix::", prefix);
-
+    const prefix = doc.head.getAttribute("prefix") || "";
     if (!prefix.includes("og: https://ogp.me/ns#")) {
-      result.head.warnings.push({
+      this.pushIssue(result, "head", this.severityMap.warning, {
         title: "Missing Open Graph prefix",
-        desc: "Add to <head> tag",
+        desc: "Required for Open Graph protocol.",
         code: '<head prefix="og: https://ogp.me/ns#">',
         tag: "head",
         elementKey: "og:prefix",
-        severity: "warning",
+        suggestion: "Add prefix attribute to <head>.",
+        reference: "https://ogp.me/",
       });
     }
-
     const required = ["og:title", "og:type", "og:image", "og:url", "og:description"];
     const found = new Set();
-
     doc.querySelectorAll('meta[property^="og:"]').forEach((m) => {
       const property = m.getAttribute("property");
       const content = m.getAttribute("content")?.trim();
-
       if (property && content) {
         this.addTag(result, "meta", property, content);
         found.add(property);
       }
     });
-
     required.forEach((tag) => {
       if (!found.has(tag)) {
-        result.head.warnings.push({
+        this.pushIssue(result, "head", this.severityMap.warning, {
           title: `Missing ${tag}`,
-          desc: "Important for perfect social sharing",
+          desc: "Important for social sharing previews.",
           code: `<meta property="${tag}" content="...">`,
           tag: `meta property="${tag}"`,
           elementKey: tag,
-          severity: "warning",
+          suggestion: "Add all required OG tags.",
+          reference: "https://developers.facebook.com/docs/sharing/webmasters/",
         });
       }
     });
